@@ -12,6 +12,7 @@ Responsibilities:
 """
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -137,8 +138,8 @@ class RepairAgent:
                 diagnosis=diagnosis,
                 action_taken=HealingAction.LOCATOR_UPDATE,
                 patch_description=f"Hardened locators in {len(changed)} step(s): steps {changed}",
-                original_code=str(original_steps),
-                patched_code=str(patched_steps),
+                original_code=json.dumps({"steps": original_steps}),
+                patched_code=json.dumps({"steps": patched_steps}),
                 success=True,
             )
         except Exception as exc:
@@ -162,8 +163,8 @@ class RepairAgent:
                 diagnosis=diagnosis,
                 action_taken=HealingAction.SELECTOR_REGENERATE,
                 patch_description="Updated selector strategy to data-testid with fallbacks",
-                original_code=str(original),
-                patched_code=str(patched),
+                original_code=json.dumps({"configuration": original}),
+                patched_code=json.dumps({"configuration": patched}),
                 success=True,
             )
         except Exception as exc:
@@ -185,8 +186,8 @@ class RepairAgent:
                 diagnosis=diagnosis,
                 action_taken=HealingAction.TIMEOUT_INCREASE,
                 patch_description=f"Timeout increased {original_timeout}ms → {new_timeout}ms (×{_TIMEOUT_MULTIPLIER})",
-                original_code=str(original_timeout),
-                patched_code=str(new_timeout),
+                original_code=json.dumps({"timeoutMs": original_timeout}),
+                patched_code=json.dumps({"timeoutMs": new_timeout}),
                 success=True,
             )
         except Exception as exc:
@@ -216,8 +217,8 @@ class RepairAgent:
                 diagnosis=diagnosis,
                 action_taken=HealingAction.ASSERTION_RELAX,
                 patch_description=f"Relaxed {changed} strict assertion(s) from 'equals' to 'contains'",
-                original_code=str(original_assertions),
-                patched_code=str(patched_assertions),
+                original_code=json.dumps({"assertions": original_assertions}),
+                patched_code=json.dumps({"assertions": patched_assertions}),
                 success=True,
             )
         except Exception as exc:
@@ -241,11 +242,12 @@ class RepairAgent:
                 diagnosis=diagnosis,
                 action_taken=HealingAction.DATA_REFRESH,
                 patch_description="Marked test data for refresh and enabled nullable field tolerance",
-                original_code=str(original_fixtures),
-                patched_code=str(patched_fixtures),
+                original_code=json.dumps({"testData": original_fixtures}),
+                patched_code=json.dumps({"testData": patched_fixtures}),
                 success=True,
             )
         except Exception as exc:
+            logger.error("Data refresh repair failed: %s", exc, exc_info=True)
             return RepairResult(
                 diagnosis=diagnosis, action_taken=HealingAction.DATA_REFRESH,
                 patch_description="Data refresh failed",
@@ -297,10 +299,11 @@ class RepairAgent:
         selector = patched.get("selector", "") or ""
 
         # Replace positional XPath like /html/body/div[N]/...
+        # Bug fix: contains(@class, '') is always true — use attribute-based predicates instead
         if re.match(r"^/html/", selector):
             tag_match = re.search(r"/(\w+)(?:\[\d+\])?$", selector)
-            tag = tag_match.group(1) if tag_match else "element"
-            patched["selector"] = f"//{tag}[contains(@class, '') or @data-testid]"
+            tag = tag_match.group(1) if tag_match else "*"
+            patched["selector"] = f"//{tag}[@data-testid or @id or @name or @aria-label]"
             patched["_originalSelector"] = selector
             patched["_healed"] = True
 
