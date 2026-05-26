@@ -12,6 +12,7 @@ Responsibilities:
 """
 from __future__ import annotations
 
+import json
 from typing import List, Optional
 
 from src.config.settings import config
@@ -137,19 +138,25 @@ class ValidationAgent:
     # ------------------------------------------------------------------
 
     def _rollback(self, repair: RepairResult) -> None:
-        """Restore the original test case configuration if repair made things worse."""
+        """Restore the original test case configuration if repair made things worse.
+
+        original_code is stored as a JSON string keyed by the field that was changed,
+        e.g. {"steps": [...]} — we restore exactly that field to its pre-repair value.
+        """
         if not repair.original_code:
-            logger.debug("No original code stored — nothing to roll back")
+            logger.warning("No original snapshot stored for '%s' — cannot roll back",
+                           repair.diagnosis.test_failure.test_case_name)
             return
         failure = repair.diagnosis.test_failure
         try:
-            # The original_code is stored as string repr; for a real implementation
-            # we'd store it as JSON. This is a best-effort rollback.
-            logger.info("Rolling back test case %s to pre-repair state …", failure.test_case_id)
-            self.tm.update_test_case(failure.test_case_id, {
-                "_rollbackNote": f"Rolled back by ValidationAgent after failed re-run. "
-                                 f"Original snapshot: {repair.original_code[:200]}",
-            })
-            logger.info("Rollback applied for '%s'", failure.test_case_name)
+            original_payload = json.loads(repair.original_code)
+        except json.JSONDecodeError as exc:
+            logger.error("Rollback aborted: original_code is not valid JSON: %s", exc)
+            return
+        try:
+            logger.info("Rolling back test case '%s' (id=%s) …",
+                        failure.test_case_name, failure.test_case_id)
+            self.tm.update_test_case(failure.test_case_id, original_payload)
+            logger.info("Rollback successful for '%s'", failure.test_case_name)
         except Exception as exc:
-            logger.error("Rollback failed: %s", exc, exc_info=True)
+            logger.error("Rollback API call failed: %s", exc, exc_info=True)
