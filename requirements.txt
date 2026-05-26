@@ -1,0 +1,13 @@
+# Core HTTP
+requests>=2.31.0
+
+# OWASP ZAP Python client (optional — our client also works without it via direct REST)
+python-owasp-zap-v2.4>=0.0.21
+
+# Utilities
+python-dotenv>=1.0.0
+
+# Dev / testing
+pytest>=7.4.0
+pytest-mock>=3.12.0
+responses>=0.24.0          # mock HTTP in tests
