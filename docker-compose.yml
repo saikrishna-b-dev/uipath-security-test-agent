@@ -1,0 +1,39 @@
+version: "3.9"
+
+services:
+  zap:
+    image: zaproxy/zap-stable
+    user: zap
+    command: >
+      zap.sh -daemon
+      -host 0.0.0.0
+      -port 8080
+      -config api.addrs.addr.name=.*
+      -config api.addrs.addr.regex=true
+      -config api.disablekey=true
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/JSON/core/view/version/"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  orchestrator:
+    build: .
+    depends_on:
+      zap:
+        condition: service_healthy
+    environment:
+      - ZAP_BASE_URL=http://zap:8080
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./config/config.json:/app/config/config.json:ro
+      - ./reports:/app/reports
+    command: python scripts/run_orchestrator.py
+
+  test:
+    build: .
+    profiles: ["test"]
+    command: pytest tests/ -v --tb=short
