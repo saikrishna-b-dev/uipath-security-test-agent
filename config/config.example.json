@@ -1,0 +1,31 @@
+{
+  "_comment": "Copy this file to config.json and fill in your values. All fields can also be set via environment variables.",
+  "uipath": {
+    "base_url": "https://staging.uipath.com",
+    "org_name": "your-org-name",
+    "tenant_name": "DefaultTenant",
+    "client_id": "YOUR_UIPATH_CLIENT_ID",
+    "client_secret": "YOUR_UIPATH_CLIENT_SECRET",
+    "tm_project_id": "YOUR_TEST_MANAGER_PROJECT_ID",
+    "tm_project_key": "SSTO"
+  },
+  "owasp_zap": {
+    "host": "localhost",
+    "port": 8080,
+    "api_key": "changeme",
+    "target_url": "http://localhost:3000",
+    "scan_policy": "Default Policy",
+    "spider_max_depth": 5,
+    "active_scan_timeout": 300
+  },
+  "orchestrator": {
+    "poll_interval_seconds": 60,
+    "max_repair_attempts": 3,
+    "rollback_on_failure": true,
+    "report_output_dir": "reports/"
+  },
+  "claude": {
+    "api_key": "YOUR_ANTHROPIC_API_KEY",
+    "model": "claude-opus-4-6"
+  }
+}
