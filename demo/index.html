@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UiPath Security Test Orchestrator — Live Demo</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+         background: #0F172A; color: #E2E8F0; min-height: 100vh; }
+  header { background: linear-gradient(135deg, #0F172A 0%, #1E3A5F 100%);
+           padding: 24px 40px; border-bottom: 2px solid #F97316; display: flex;
+           align-items: center; gap: 20px; }
+  header h1 { font-size: 1.4rem; font-weight: 800; color: #fff; }
+  header p  { font-size: 0.85rem; color: #94A3B8; margin-top: 4px; }
+  .badge { background: #F97316; color: #fff; font-size: 11px; font-weight: 700;
+           padding: 3px 10px; border-radius: 12px; white-space: nowrap; }
+  main { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+  .pipeline { display: flex; align-items: center; gap: 0; margin-bottom: 40px; flex-wrap: wrap; }
+  .step { flex: 1; min-width: 140px; background: #1E293B; border: 2px solid #334155;
+          border-radius: 10px; padding: 16px 12px; text-align: center; transition: all 0.4s; }
+  .step.active  { border-color: var(--col); box-shadow: 0 0 20px color-mix(in srgb, var(--col) 40%, transparent); }
+  .step.done    { border-color: #16A34A; background: #14532D22; }
+  .step-num { width: 32px; height: 32px; border-radius: 50%; background: var(--col);
+              margin: 0 auto 8px; display: flex; align-items: center; justify-content: center;
+              font-weight: 800; font-size: 14px; color: #fff; }
+  .step-name  { font-weight: 700; font-size: 13px; color: #fff; margin-bottom: 4px; }
+  .step-sub   { font-size: 11px; color: #64748B; }
+  .step-status{ font-size: 11px; margin-top: 8px; font-weight: 600; height: 16px; }
+  .arrow { color: #475569; font-size: 20px; padding: 0 4px; flex-shrink: 0; }
+  .console { background: #020617; border: 1px solid #1E293B; border-radius: 10px;
+             padding: 20px; font-family: 'Courier New', monospace; font-size: 12.5px;
+             min-height: 220px; max-height: 280px; overflow-y: auto; margin-bottom: 28px; }
+  .log-line { margin-bottom: 6px; display: flex; gap: 10px; }
+  .log-time  { color: #475569; flex-shrink: 0; }
+  .log-agent { font-weight: 700; flex-shrink: 0; }
+  .log-msg   { color: #CBD5E1; }
+  .kpis { display: flex; gap: 16px; margin-bottom: 32px; flex-wrap: wrap; }
+  .kpi  { background: #1E293B; border-radius: 10px; padding: 18px 24px; flex: 1;
+          min-width: 120px; border-top: 3px solid var(--col); }
+  .kpi-val { font-size: 2.2rem; font-weight: 800; color: var(--col); }
+  .kpi-lbl { font-size: 12px; color: #64748B; margin-top: 4px; }
+  table { width: 100%; border-collapse: collapse; background: #1E293B;
+          border-radius: 10px; overflow: hidden; margin-bottom: 32px; }
+  th { background: #0F172A; color: #94A3B8; text-align: left; padding: 10px 14px;
+       font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+  td { padding: 10px 14px; border-bottom: 1px solid #0F172A; font-size: 13px; }
+  tr:last-child td { border-bottom: none; }
+  .healed    { color: #16A34A; font-weight: 700; }
+  .escalated { color: #DC2626; font-weight: 700; }
+  .controls { display: flex; gap: 12px; margin-bottom: 32px; flex-wrap: wrap; }
+  button { padding: 10px 24px; border-radius: 8px; border: none; cursor: pointer;
+           font-weight: 700; font-size: 14px; transition: all 0.2s; }
+  .btn-run   { background: #F97316; color: #fff; }
+  .btn-run:hover { background: #EA6006; }
+  .btn-run:disabled { background: #475569; cursor: not-allowed; }
+  .btn-reset { background: #1E293B; color: #94A3B8; border: 1px solid #334155; }
+  .progress-bar { height: 4px; background: #1E293B; border-radius: 2px; margin-bottom: 28px; overflow: hidden; }
+  .progress-fill { height: 100%; background: #F97316; width: 0; transition: width 0.3s ease; border-radius: 2px; }
+  .section-title { font-size: 14px; font-weight: 700; color: #94A3B8; text-transform: uppercase;
+                   letter-spacing: 1px; margin-bottom: 12px; }
+  .pulse { animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+</style>
+</head>
+<body>
+<header>
+  <div style="font-size:2.4rem">&#x1F510;</div>
+  <div style="flex:1">
+    <h1>UiPath Security Test Orchestrator</h1>
+    <p>Autonomous OWASP security test healing &mdash; UiPath Maestro &middot; Agent Builder &middot; Test Cloud &middot; Claude Code</p>
+  </div>
+  <div class="badge">AgentHack 2026 &middot; Track 3</div>
+</header>
+<main>
+  <div class="section-title" style="margin-bottom:16px">5-Agent Pipeline</div>
+  <div class="pipeline" id="pipeline">
+    <div class="step" id="s1" style="--col:#0D9488">
+      <div class="step-num">1</div><div class="step-name">Monitor</div>
+      <div class="step-sub">Test Cloud API</div><div class="step-status" id="st1"></div>
+    </div>
+    <div class="arrow">&#8594;</div>
+    <div class="step" id="s2" style="--col:#7C3AED">
+      <div class="step-num">2</div><div class="step-name">Diagnose</div>
+      <div class="step-sub">ML Classifier</div><div class="step-status" id="st2"></div>
+    </div>
+    <div class="arrow">&#8594;</div>
+    <div class="step" id="s3" style="--col:#F97316">
+      <div class="step-num">3</div><div class="step-name">Repair</div>
+      <div class="step-sub">Claude Code LLM</div><div class="step-status" id="st3"></div>
+    </div>
+    <div class="arrow">&#8594;</div>
+    <div class="step" id="s4" style="--col:#16A34A">
+      <div class="step-num">4</div><div class="step-name">Validate</div>
+      <div class="step-sub">Test Cloud</div><div class="step-status" id="st4"></div>
+    </div>
+    <div class="arrow">&#8594;</div>
+    <div class="step" id="s5" style="--col:#0EA5E9">
+      <div class="step-num">5</div><div class="step-name">Report</div>
+      <div class="step-sub">HTML + JSON</div><div class="step-status" id="st5"></div>
+    </div>
+  </div>
+  <div class="controls">
+    <button class="btn-run" id="btnRun" onclick="runDemo()">&#9654; Run Healing Cycle</button>
+    <button class="btn-reset" onclick="resetDemo()">&#8635; Reset</button>
+  </div>
+  <div class="progress-bar"><div class="progress-fill" id="progress"></div></div>
+  <div class="section-title">Agent Execution Log</div>
+  <div class="console" id="console">
+    <div style="color:#475569;font-style:italic">Press "Run Healing Cycle" to start the demo...</div>
+  </div>
+  <div class="section-title">Run Metrics</div>
+  <div class="kpis">
+    <div class="kpi" style="--col:#DC2626"><div class="kpi-val" id="kFail">&#8212;</div><div class="kpi-lbl">Failures Detected</div></div>
+    <div class="kpi" style="--col:#F97316"><div class="kpi-val" id="kHeal">&#8212;</div><div class="kpi-lbl">Heal Rate</div></div>
+    <div class="kpi" style="--col:#16A34A"><div class="kpi-val" id="kPass">&#8212;</div><div class="kpi-lbl">Tests Healed</div></div>
+    <div class="kpi" style="--col:#0D9488"><div class="kpi-val" id="kFind">&#8212;</div><div class="kpi-lbl">OWASP Findings</div></div>
+    <div class="kpi" style="--col:#7C3AED"><div class="kpi-val" id="kTime">&#8212;</div><div class="kpi-lbl">Run Time</div></div>
+  </div>
+  <div class="section-title">Self-Healing Results</div>
+  <table>
+    <thead><tr><th>Test Case</th><th>Root Cause</th><th>Healing Action</th><th>Outcome</th></tr></thead>
+    <tbody id="resultsBody">
+      <tr><td colspan="4" style="color:#475569;text-align:center;padding:20px">Run a cycle to see results</td></tr>
+    </tbody>
+  </table>
+</main>
+<script>
+const STEPS=[{id:'s1',st:'st1',label:'Polling Test Cloud...',done:'8 failures found'},{id:'s2',st:'st2',label:'Classifying root causes...',done:'4 categories mapped'},{id:'s3',st:'st3',label:'Claude Code healing...',done:'8 scripts patched'},{id:'s4',st:'st4',label:'Re-running in Test Cloud...',done:'7 passed, 1 escalated'},{id:'s5',st:'st5',label:'Generating report...',done:'HTML + JSON written'}];
+const LOGS=[[300,'#0D9488','Monitor','Polling UiPath Test Cloud — project Security-Test-Orchestrator'],[900,'#0D9488','Monitor','Found 8 failed test executions in the last run'],[1400,'#7C3AED','Diagnosis','Analysing failure logs and HTTP responses...'],[2000,'#7C3AED','Diagnosis','Root causes: 3x	endpoint_changed, 2x auth_failure, 2x locator_drift, 1x header_mismatch'],[2600,'#F97316','Repair','Invoking Claude Code LLM — sending broken scripts for healing'],[3100,'#F97316','Repair','TC-001 healed: /api/users/search → /api/v1/users/search + auth header added'],[3500,'#F97316','Repair','TC-002 healed: JWT token refresh flow updated'],[4000,'#F97316','Repair','TC-003 healed: IDOR endpoint path corrected'],[4300,'#F97316','Repair','TC-004 healed: CSP assertion updated to match new policy'],[4600,'#F97316','Repair','TC-005 healed: CSRF locator hardened to data-testid selector'],[4900,'#F97316','Repair','TC-006 healed: TLS version assertion updated'],[5200,'#F97316','Repair','TC-007 healed: Cookie flag locator hardened'],[5500,'#F97316','Repair','TC-008 repair FAILED — auth context incompatible. Auto-rollback triggered.'],[6000,'#16A34A','Validation','Re-executing 8 patched tests in Test Cloud...'],[6600,'#16A34A','Validation','7 tests PASSED | 1 test FAILED — escalating to Action Center'],[7000,'#0EA5E9','Report','Generating HTML audit report + JSON machine-readable output'],[7400,'#0EA5E9','Report','Report written: reports/run_a3f9b12c_report.html'],[7600,'#0EA5E9','Report','Heal rate: 87.5% | OWASP findings: 11 | Critical: 1']];
+const RESULTS=[['TC-001 · SQL Injection scan','endpoint_changed','update_endpoint',true],['TC-002 · JWT auth token','auth_failure','refresh_auth_token',true],['TC-003 · IDOR order-access','endpoint_changed','update_endpoint',true],['TC-004 · CSP�He�	ertion','header_mismatch','update_assertion',true],['TC-005 · CSRF token verification','locator_drift','harden_locator',true],['TC-006 · TLS version negotiation','header_mismatch','update_assertion',true],['TC-007 · Cookie security flags','locator_drift','harden_locator',true],['TC-008 · Verbose error message leak','auth_failure','refresh_auth_token',false]];
+let running=false;
+function pad(n){return String(n).padStart(2,'0');}
+function fakeTime(ms){const b=3*3600+14*60+2,s=b+Math.floor(ms/1000);return pad(Math.floor(s/3600))+':'+pad(Math.floor((s%3600)/60))+':'+pad(s%60)+' UTC';}
+function logLine(ms,color,agent,msg){const c=document.getElementById('console'),d=document.createElement('div');d.className='log-line';d.innerHTML<`<span class="log-time">${fakeTime(ms)}</span><span class="log-agent" style="color:${color}">[${agent}]</span><span class="log-msg">${msg}</span>`;c.appendChild(d);c.scrollTop=c.scrollHeight;}
+function setStep(i,state){const s=STEPS[i],el=document.getElementById(s.id),st=document.getElementById(s.st);el.classList.remove('active','done');if(state==='active'){el.classList.add('active');st.innerHTML=`<span class="pulse" style="color:#F97316">● ${s.label}</span>`;}if(state==='done'){el.classList.add('done');st.innerHTML=`<span style="color:#16A34A">✓ ${s.done}</span>`;}if(state==='')st.innerHTML='';}
+function setProgress(p){document.getElementById('progress').style.width=p+'%';}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+async function runDemo(){
+  if(running)return;running=true;
+  document.getElementById('btnRun').disabled=true;
+  document.getElementById('console').innerHTML='';
+  document.getElementById('resultsBody').innerHTML='<tr><td colspan="4" style="color:#475569;text-align:center;padding:20px">Running...</td></tr>';
+  ['kFail','kHeal','kPass','kFind','kTime'].forEach(id=>document.getElementById(id).textContent='—');
+  STEPS.forEach((_,i)=>setStep(i,''));setProgress(0);
+  const TOTAL=8000,stepTimes=[300,1400,2600,6000,7000];
+  let stepIdx=-1,logIdx=0;
+  for(let t=0;t<=TOTAL;t+=50){
+    for(let i=0;i<stepTimes.length;i++){if(t>=stepTimes[i]&&i>stepIdx){if(stepIdx>=0)setStep(stepIdx,'done');stepIdx=i;setStep(stepIdx,'active');}}
+    while(logIdx<LOGS.length&&t>=LOGS[logIdx][0]){const[,color,agent,msg]=LOGS[logIdx];logLine(LOGS[logIdx][0],color,agent,msg);logIdx++;}
+    setProgress(Math.min(100,Math.round(t/TOTAL*100)));
+    await sleep(50);
+  }
+  setStep(stepIdx,'done');setProgress(100);
+  document.getElementById('kFail').textContent='8';
+  document.getElementById('kHeal').textContent='87%';
+  document.getElementById('kPass').textContent='7';
+  document.getElementById('kFind').textContent='11';
+  document.getElementById('kTime').textContent='4m 37s';
+  const tbody=document.getElementById('resultsBody');tbody.innerHTML='';
+  RESULTS.forEach(([tc,cause,action,healed])=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${tc}</td><td><code style="font-size:11px;color:#94A3B8">${cause}</code></td><td><code style="font-size:11px;color:#94A3B8">${action}</code></td><td class="${healed?'healed':'escalated'}">${healed?'✅ HEALED':'❌ ESCALATED → Action Center'}</td>`;tbody.appendChild(tr);});
+  running=false;document.getElementById('btnRun').disabled=false;
+}
+function resetDemo(){if(running)return;document.getElementById('console').innerHTML='<div style="color:#475569;font-style:italic">Press "Run Healing Cycle" to start the demo...</div>';document.getElementById('resultsBody').innerHTML='<tr><td colspan="4" style="color:#475569;text-align:center;padding:20px">Run a cycle to see results</td></tr>';['kFail','kHeal','kPass','kFind','kTime'].forEach(id=>document.getElementById(id).textContent='—');STEPS.forEach((_,i)=>setStep(i,''));setProgress(0);}
+</script>
+</body>
+</html>
