@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  UiPath Maestro Orchestration Process
+  Project: UiPath Security Test Orchestrator
+  AgentHack 2026 — Track 3: Test Cloud
+  Builder: Sai Krishna B
+
+  This process drives the full 5-agent autonomous healing loop:
+    Monitor → Diagnosis → Repair → Validation → Report
+  
+  Trigger: Scheduled (every 60 min) OR manual from UiPath Action Center
+-->
+<Activity
+  x:Class="SecurityTestOrchestrator.Workflows.MaestroOrchestrator"
+  xmlns="http://schemas.uipath.com/workflow/activities"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:maestro="http://schemas.uipath.com/maestro/2024"
+  xmlns:testcloud="http://schemas.uipath.com/testcloud/2024"
+  xmlns:agentbuilder="http://schemas.uipath.com/agentbuilder/2024"
+  xmlns:s="clr-namespace:System;assembly=mscorlib"
+  xmlns:collection="clr-namespace:System.Collections.Generic;assembly=mscorlib"
+  DisplayName="Security Test Orchestrator — Maestro Process">
+
+  <!-- ═══════════════════════════════════════════════════
+       PROCESS ARGUMENTS
+  ═══════════════════════════════════════════════════ -->
+  <x:Members>
+    <x:Property Name="in_ProjectId"         Type="InArgument(x:String)"  />
+    <x:Property Name="in_PollIntervalMin"   Type="InArgument(x:Int32)"   />
+    <x:Property Name="in_DryRun"            Type="InArgument(x:Boolean)" />
+    <x:Property Name="out_HealRate"         Type="OutArgument(x:Double)" />
+    <x:Property Name="out_ReportPath"       Type="OutArgument(x:String)" />
+  </x:Members>
+
+  <Sequence DisplayName="Main Orchestration Loop">
+
+    <!-- ─── STEP 0: Initialise ─── -->
+    <maestro:LogMessage Level="Info"
+      Text="[Orchestrator] Starting Security Test Orchestrator cycle" />
+
+    <maestro:SetVariable x:TypeArguments="collection:List(x:Object)"
+      VariableName="failedTests" />
+    <maestro:SetVariable x:TypeArguments="x:Int32"
+      VariableName="healedCount" Value="0" />
+    <maestro:SetVariable x:TypeArguments="x:Int32"
+      VariableName="totalFailures" Value="0" />
+
+    <!-- ─── STEP 1: Monitor Agent — Poll Test Cloud ─── -->
+    <agentbuilder:InvokeAgent DisplayName="Monitor Agent — Poll Test Cloud">
+      <agentbuilder:InvokeAgent.AgentConfig>
+        <agentbuilder:AgentConfig
+          AgentName="MonitorAgent"
+          PackageName="SecurityTestOrchestrator.Agents"
+          EntryPoint="MonitorAgent.xaml" />
+      </agentbuilder:InvokeAgent.AgentConfig>
+      <agentbuilder:InvokeAgent.InputArguments>
+        <agentbuilder:AgentArgument Name="ProjectId" Value="{x:Bind in_ProjectId}" />
+      </agentbuilder:InvokeAgent.InputArguments>
+      <agentbuilder:InvokeAgent.OutputArguments>
+        <agentbuilder:AgentArgument Name="FailedTests" Variable="failedTests" />
+        <agentbuilder:AgentArgument Name="TotalFailures" Variable="totalFailures" />
+      </agentbuilder:InvokeAgent.OutputArguments>
+    </agentbuilder:InvokeAgent>
+
+    <maestro:LogMessage Level="Info"
+      Text="[Monitor] Detected {totalFailures} failed test(s)" />
+
+    <!-- ─── BRANCH: No failures → exit early ─── -->
+    <If Condition="{x:Bind totalFailures == 0}">
+      <If.Then>
+        <Sequence DisplayName="No failures — exit clean">
+          <maestro:LogMessage Level="Info"
+            Text="[Orchestrator] All tests passing. No action needed." />
+          <maestro:SetVariable VariableName="out_HealRate" Value="1.0" />
+          <maestro:Terminate />
+        </Sequence>
+      </If.Then>
+    </If>
+
+    <!-- ─── STEP 2: Diagnosis Agent — Root Cause Analysis ─── -->
+    <agentbuilder:InvokeAgent DisplayName="Diagnosis Agent — Root Cause Analysis">
+      <agentbuilder:InvokeAgent.AgentConfig>
+        <agentbuilder:AgentConfig
+          AgentName="DiagnosisAgent"
+          PackageName="SecurityTestOrchestrator.Agents"
+          EntryPoint="DiagnosisAgent.xaml" />
+      </agentbuilder:InvokeAgent.AgentConfig>
+      <agentbuilder:InvokeAgent.InputArguments>
+        <agentbuilder:AgentArgument Name="FailedTests" Value="{x:Bind failedTests}" />
+      </agentbuilder:InvokeAgent.InputArguments>
+      <agentbuilder:InvokeAgent.OutputArguments>
+        <agentbuilder:AgentArgument Name="DiagnosedTests" Variable="diagnosedTests" />
+      </agentbuilder:InvokeAgent.OutputArguments>
+    </agentbuilder:InvokeAgent>
+
+    <!-- ─── STEP 3: Repair Agent — LLM-Powered Healing ─── -->
+    <If Condition="{x:Bind in_DryRun == false}">
+      <If.Then>
+        <agentbuilder:InvokeAgent DisplayName="Repair Agent — Claude Code LLM Healing">
+          <agentbuilder:InvokeAgent.AgentConfig>
+            <agentbuilder:AgentConfig
+              AgentName="RepairAgent"
+              PackageName="SecurityTestOrchestrator.Agents"
+              EntryPoint="RepairAgent.xaml" />
+          </agentbuilder:InvokeAgent.AgentConfig>
+          <agentbuilder:InvokeAgent.InputArguments>
+            <agentbuilder:AgentArgument Name="DiagnosedTests" Value="{x:Bind diagnosedTests}" />
+            <agentbuilder:AgentArgument Name="MaxAttempts"    Value="3" />
+          </agentbuilder:InvokeAgent.InputArguments>
+          <agentbuilder:InvokeAgent.OutputArguments>
+            <agentbuilder:AgentArgument Name="RepairedTests" Variable="repairedTests" />
+            <agentbuilder:AgentArgument Name="RolledBack"    Variable="rolledBackTests" />
+          </agentbuilder:InvokeAgent.OutputArguments>
+        </agentbuilder:InvokeAgent>
+      </If.Then>
+      <If.Else>
+        <maestro:LogMessage Level="Warning"
+          Text="[Orchestrator] DryRun=true — skipping repair, diagnosis only" />
+      </If.Else>
+    </If>
+
+    <!-- ─── STEP 4: Validation Agent — Re-run in Test Cloud ─── -->
+    <agentbuilder:InvokeAgent DisplayName="Validation Agent — Re-run Tests in Test Cloud">
+      <agentbuilder:InvokeAgent.AgentConfig>
+        <agentbuilder:AgentConfig
+          AgentName="ValidationAgent"
+          PackageName="SecurityTestOrchestrator.Agents"
+          EntryPoint="ValidationAgent.xaml" />
+      </agentbuilder:InvokeAgent.AgentConfig>
+      <agentbuilder:InvokeAgent.InputArguments>
+        <agentbuilder:AgentArgument Name="RepairedTests" Value="{x:Bind repairedTests}" />
+        <agentbuilder:AgentArgument Name="ProjectId"     Value="{x:Bind in_ProjectId}" />
+      </agentbuilder:InvokeAgent.InputArguments>
+      <agentbuilder:InvokeAgent.OutputArguments>
+        <agentbuilder:AgentArgument Name="PassedCount"    Variable="healedCount" />
+        <agentbuilder:AgentArgument Name="EscalatedTests" Variable="escalatedTests" />
+      </agentbuilder:InvokeAgent.OutputArguments>
+    </agentbuilder:InvokeAgent>
+
+    <!-- ─── STEP 4a: Escalate failures to Action Center ─── -->
+    <ForEach x:TypeArguments="x:Object" Values="{x:Bind escalatedTests}"
+             DisplayName="Escalate unhealed tests to Action Center">
+      <ActivityAction x:TypeArguments="x:Object">
+        <ActivityAction.Argument>
+          <DelegateInArgument x:TypeArguments="x:Object" Name="failedTest" />
+        </ActivityAction.Argument>
+        <maestro:CreateActionCenterTask
+          DisplayName="Create Action Center task for escalated test"
+          Title="Security test healing failed — manual review required"
+          Priority="High"
+          AssignTo="SecurityTeam"
+          Data="{x:Bind failedTest}" />
+      </ActivityAction>
+    </ForEach>
+
+    <!-- ─── STEP 5: Report Agent — HTML + JSON Audit ─── -->
+    <agentbuilder:InvokeAgent DisplayName="Report Agent — Generate Audit Report">
+      <agentbuilder:InvokeAgent.AgentConfig>
+        <agentbuilder:AgentConfig
+          AgentName="ReportAgent"
+          PackageName="SecurityTestOrchestrator.Agents"
+          EntryPoint="ReportAgent.xaml" />
+      </agentbuilder:InvokeAgent.AgentConfig>
+      <agentbuilder:InvokeAgent.InputArguments>
+        <agentbuilder:AgentArgument Name="TotalFailures"   Value="{x:Bind totalFailures}" />
+        <agentbuilder:AgentArgument Name="HealedCount"     Value="{x:Bind healedCount}" />
+        <agentbuilder:AgentArgument Name="DiagnosedTests"  Value="{x:Bind diagnosedTests}" />
+        <agentbuilder:AgentArgument Name="EscalatedTests"  Value="{x:Bind escalatedTests}" />
+      </agentbuilder:InvokeAgent.InputArguments>
+      <agentbuilder:InvokeAgent.OutputArguments>
+        <agentbuilder:AgentArgument Name="ReportPath" Variable="out_ReportPath" />
+      </agentbuilder:InvokeAgent.OutputArguments>
+    </agentbuilder:InvokeAgent>
+
+    <!-- ─── Final: Compute heal rate ─── -->
+    <Assign DisplayName="Compute heal rate">
+      <Assign.To>
+        <OutArgument x:TypeArguments="x:Double">[out_HealRate]</OutArgument>
+      </Assign.To>
+      <Assign.Value>
+        <InArgument x:TypeArguments="x:Double">
+          [CDbl(healedCount) / CDbl(totalFailures)]
+        </InArgument>
+      </Assign.Value>
+    </Assign>
+
+    <maestro:LogMessage Level="Info"
+      Text="[Orchestrator] Cycle complete. HealRate={out_HealRate:P0}. Report: {out_ReportPath}" />
+
+  </Sequence>
+</Activity>
